@@ -3,13 +3,43 @@ local UIS = game:GetService("UserInputService")
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
+local HttpService = game:GetService("HttpService")
 
 local player = Players.LocalPlayer
 
 Lib.Name = "Misthycc Hub_Minimal"
 Lib.Parent = game:GetService("CoreGui")
 Lib.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
 
+local player = Players.LocalPlayer
+local infinityJumpEnabled = true
+local jumpForce = 50
+local clampFallSpeed = 80
+
+RunService.Heartbeat:Connect(function()
+	if not infinityJumpEnabled then return end
+	local char = player.Character
+	if not char then return end
+
+	local hrp = char:FindFirstChild("HumanoidRootPart")
+	if hrp and hrp.Velocity.Y < -clampFallSpeed then
+		hrp.Velocity = Vector3.new(hrp.Velocity.X, -clampFallSpeed, hrp.Velocity.Z)
+	end
+end)
+
+UserInputService.JumpRequest:Connect(function()
+	if not infinityJumpEnabled then return end
+	local char = player.Character
+	if not char then return end
+
+	local hrp = char:FindFirstChild("HumanoidRootPart")
+	if hrp then
+		hrp.Velocity = Vector3.new(hrp.Velocity.X, jumpForce, hrp.Velocity.Z)
+	end
+end)
 -- ========== AUTO DUEL VARIABLES ==========
 local rightWaypoints = {
     Vector3.new(-473.04, -6.99, 29.71),
@@ -60,7 +90,6 @@ local function setupSpinBot()
     local hrp = char:FindFirstChild("HumanoidRootPart")
     if not hrp then return end
 
-    -- Clean up old instances
     if spinAlign then spinAlign:Destroy() end
     if spinAttachment then spinAttachment:Destroy() end
 
@@ -138,7 +167,7 @@ local tpCheckA     = Vector3.new(-472.60, -7.00, 57.52)
 local tpCheckLeft  = Vector3.new(-472.65, -7.00, 95.69)
 local tpCheckRight = Vector3.new(-471.76, -7.00, 26.22)
 
-local lastTpSide = "none"   -- tracks which side the player last TP'd to
+local lastTpSide = "none"
 local ragdollDetectorConn = nil
 local ragdollAutoActive = false
 
@@ -174,7 +203,6 @@ local function isRagdolled(char)
     if not char then return false end
     local hum = char:FindFirstChildOfClass("Humanoid")
     if hum and hum:GetState() == Enum.HumanoidStateType.Ragdoll then return true end
-    -- fallback: check for ragdoll state value some games use
     local ragVal = char:FindFirstChild("Ragdoll") or char:FindFirstChild("IsRagdoll")
     if ragVal and ragVal:IsA("BoolValue") and ragVal.Value then return true end
     return false
@@ -199,7 +227,6 @@ local function startAntiRagdoll()
             if state == Enum.HumanoidStateType.Physics
             or state == Enum.HumanoidStateType.Ragdoll
             or state == Enum.HumanoidStateType.FallingDown then
-                -- Let ragdoll TP fire first if it's waiting
                 if not ragdollWasActive then
                     hum:ChangeState(Enum.HumanoidStateType.Running)
                     if workspace.CurrentCamera then
@@ -212,7 +239,6 @@ local function startAntiRagdoll()
                 end
             end
         end
-        -- Re-enable any disabled Motor6Ds
         for _, obj in ipairs(char:GetDescendants()) do
             if obj:IsA("Motor6D") and obj.Enabled == false then
                 obj.Enabled = true
@@ -262,12 +288,11 @@ local function startRagdollDetector()
         local char = player.Character
         if not char then return end
         local nowRagdolled = isRagdolled(char)
-        -- detect rising edge: just became ragdolled
         if nowRagdolled and not ragdollWasActive then
             ragdollWasActive = true
             print("Ragdoll detected! Auto-TP + patrol on side:", lastTpSide)
             task.spawn(function()
-                task.wait(0.15) -- tiny settle wait
+                task.wait(0.15)
                 if lastTpSide == "left" then
                     doTPLeft()
                     task.wait(0.2)
@@ -495,13 +520,11 @@ end
 
 local function updateButtonState(button, isActive, activeText, inactiveText)
     if isActive then
-        -- Make entire button transparent purple
         button.BackgroundColor3 = Color3.fromRGB(130, 80, 255)
         button.BackgroundTransparency = 0.7
         button:FindFirstChild("StatusDot").BackgroundColor3 = Color3.fromRGB(100, 255, 100)
         button:FindFirstChild("Label").Text = activeText
     else
-        -- Reset to original dark style
         button.BackgroundColor3 = Color3.fromRGB(10, 10, 12)
         button.BackgroundTransparency = 0.15
         button:FindFirstChild("StatusDot").BackgroundColor3 = Color3.fromRGB(70, 70, 80)
@@ -519,6 +542,7 @@ local function startMovement(mode, button)
         updateButtonState(button, true, "Auto Left [ON]", "Auto Left")
         print("AutoLeft movement started")
     end
+    saveConfig() -- Sauvegarde auto
 end
 
 local function stopMovement(rightButton, leftButton)
@@ -537,6 +561,7 @@ local function stopMovement(rightButton, leftButton)
             root.AssemblyLinearVelocity = Vector3.new(0, root.AssemblyLinearVelocity.Y, 0)
         end
     end
+    saveConfig() -- Sauvegarde auto
 end
 
 -- ========== BAT AIMBOT FUNCTIONS ==========
@@ -599,20 +624,16 @@ local function startBatAimbot()
         local target, dist, torso = findNearestEnemy(h)
         
         if target and torso then
-            -- Prediction
             local Prediction = 0.13
             local PredictedPos = torso.Position + (torso.AssemblyLinearVelocity * Prediction)
             
-            -- Make humanoid face target (safe method)
             local lookDir = (PredictedPos - h.Position)
             local flatDir = Vector3.new(lookDir.X, 0, lookDir.Z)
             
-            -- Use move direction to make character face target
             if flatDir.Magnitude > 0 then
                 hum.AutoRotate = true
             end
             
-            -- Move toward target
             local myPos = h.Position
             local dir = (PredictedPos - myPos)
             
@@ -639,7 +660,7 @@ local function updateWalking()
     if not char then return end
 
     local root = char:FindFirstChild("HumanoidRootPart")
-    local hum = char:FindFirstChild("Humanoid")
+    local hum = char:FindFirstChildOfClass("Humanoid")
     if not root or not hum then return end
 
     local currentVel = root.AssemblyLinearVelocity
@@ -761,7 +782,6 @@ local function ApplyStyle(obj)
     Stroke.Thickness = 2
     Stroke.Transparency = 0.3
     
-    -- Add pulsing glow animation to outline
     task.spawn(function()
         while Stroke and Stroke.Parent do
             for i = 0, 30 do
@@ -785,7 +805,6 @@ Title.Position = UDim2.new(0.5, -80, 0.05, 0)
 ApplyStyle(Title)
 MakeDraggable(Title)
 
--- Add glowing purple outline to title
 local TitleStroke = Title:FindFirstChildOfClass("UIStroke")
 if TitleStroke then
     TitleStroke.Color = Color3.fromRGB(130, 80, 255)
@@ -801,7 +820,6 @@ TText.TextColor3 = Color3.fromRGB(180, 130, 255)
 TText.Font = Enum.Font.GothamBold
 TText.TextSize = 13
 
--- Floating animation for title
 task.spawn(function()
     local originalY = Title.Position.Y.Scale
     local originalYOffset = Title.Position.Y.Offset
@@ -854,7 +872,7 @@ for _, data in pairs(buttonData) do
     lbl.TextXAlignment = Enum.TextXAlignment.Left
 
     local gear = Instance.new("TextLabel", b)
-    gear.Text = "âš™"
+    gear.Text = "⚙"
     gear.Position = UDim2.new(1, -20, 0, 0)
     gear.Size = UDim2.new(0, 20, 1, 0)
     gear.BackgroundTransparency = 1
@@ -882,6 +900,7 @@ buttons["float"].MouseButton1Click:Connect(function()
         end
         print("Float OFF")
     end
+    saveConfig()
 end)
 
 -- Auto Right Button
@@ -952,6 +971,7 @@ buttons["Bat Aimbot"].MouseButton1Click:Connect(function()
         stopBatAimbot()
         print("Bat Aimbot OFF")
     end
+    saveConfig()
 end)
 
 -- TP [Left] Button
@@ -968,6 +988,7 @@ buttons["TP [Left]"].MouseButton1Click:Connect(function()
         end
     end)
     print("TP Left activated - ragdoll auto ON")
+    saveConfig()
 end)
 
 -- TP [Right] Button
@@ -984,6 +1005,7 @@ buttons["TP [Right]"].MouseButton1Click:Connect(function()
         end
     end)
     print("TP Right activated - ragdoll auto ON")
+    saveConfig()
 end)
 
 -- ========== SETTINGS MENU PANEL ==========
@@ -1043,7 +1065,6 @@ for _, name in pairs(settingsItems) do
     
     settingsToggles[name] = item
     
-    -- Spin Bot toggle
     if name == "Spin Bot" then
         item.MouseButton1Click:Connect(function()
             local isActive = dot.BackgroundColor3 == Color3.fromRGB(100, 255, 100)
@@ -1061,10 +1082,10 @@ for _, name in pairs(settingsItems) do
                 dot.BackgroundColor3 = Color3.fromRGB(70, 70, 80)
                 print("Spin Bot OFF")
             end
+            saveConfig()
         end)
     end
 
-    -- Anti Ragdoll toggle
     if name == "Anti Ragdoll" then
         item.MouseButton1Click:Connect(function()
             local isActive = dot.BackgroundColor3 == Color3.fromRGB(100, 255, 100)
@@ -1083,10 +1104,10 @@ for _, name in pairs(settingsItems) do
                 dot.BackgroundColor3 = Color3.fromRGB(70, 70, 80)
                 print("Anti Ragdoll OFF")
             end
+            saveConfig()
         end)
     end
 
-    -- Unwalk toggle
     if name == "Unwalk" then
         item.MouseButton1Click:Connect(function()
             local isActive = dot.BackgroundColor3 == Color3.fromRGB(100, 255, 100)
@@ -1105,10 +1126,10 @@ for _, name in pairs(settingsItems) do
                 dot.BackgroundColor3 = Color3.fromRGB(70, 70, 80)
                 print("Unwalk OFF")
             end
+            saveConfig()
         end)
     end
 
-    -- Steal Speed toggle
     if name == "Steal Speed" then
         item.MouseButton1Click:Connect(function()
             local isActive = dot.BackgroundColor3 == Color3.fromRGB(100, 255, 100)
@@ -1127,10 +1148,10 @@ for _, name in pairs(settingsItems) do
                 dot.BackgroundColor3 = Color3.fromRGB(70, 70, 80)
                 print("Steal Speed OFF")
             end
+            saveConfig()
         end)
     end
 
-    -- Auto Steal toggle
     if name == "Auto Steal" then
         item.MouseButton1Click:Connect(function()
             local isActive = dot.BackgroundColor3 == Color3.fromRGB(100, 255, 100)
@@ -1149,27 +1170,25 @@ for _, name in pairs(settingsItems) do
                 dot.BackgroundColor3 = Color3.fromRGB(70, 70, 80)
                 print("Auto Steal OFF")
             end
+            saveConfig()
         end)
     end
 
-    -- Anti Fling toggle (does nothing, just visual)
     if name == "Anti Fling" then
         item.MouseButton1Click:Connect(function()
             local isActive = dot.BackgroundColor3 == Color3.fromRGB(100, 255, 100)
-            
             if not isActive then
-                -- Turn ON
                 item.BackgroundColor3 = Color3.fromRGB(130, 80, 255)
                 item.BackgroundTransparency = 0.7
                 dot.BackgroundColor3 = Color3.fromRGB(100, 255, 100)
                 print("Anti Fling ON (visual only)")
             else
-                -- Turn OFF
                 item.BackgroundColor3 = Color3.fromRGB(10, 10, 12)
                 item.BackgroundTransparency = 0.15
                 dot.BackgroundColor3 = Color3.fromRGB(70, 70, 80)
                 print("Anti Fling OFF")
             end
+            saveConfig()
         end)
     end
 end
@@ -1177,52 +1196,23 @@ end
 local ResetBtn = Instance.new("TextButton", SettingsPanel)
 ResetBtn.Size = UDim2.new(1, -20, 0, 30)
 ResetBtn.Position = UDim2.new(0, 10, 1, -40)
-ResetBtn.Text = "RESET BUTTONS"
+ResetBtn.Text = "RESET BUTTONS POSITIONS"
 ResetBtn.TextColor3 = Color3.new(1, 1, 1)
 ResetBtn.Font = Enum.Font.GothamBold
 ResetBtn.TextSize = 11
 ApplyStyle(ResetBtn)
 
--- Reset button functionality - resets all button positions to original
 ResetBtn.MouseButton1Click:Connect(function()
-    -- Reset Float button
-    if buttons["float"] then
-        buttons["float"].Position = UDim2.new(0.7, 0, 0.3, 0)
-    end
-    -- Reset Bat Aimbot button
-    if buttons["Bat Aimbot"] then
-        buttons["Bat Aimbot"].Position = UDim2.new(0.82, 0, 0.3, 0)
-    end
-    -- Reset Auto Left button
-    if buttons["autoleft"] then
-        buttons["autoleft"].Position = UDim2.new(0.7, 0, 0.36, 0)
-    end
-    -- Reset Auto Right button
-    if buttons["autoright"] then
-        buttons["autoright"].Position = UDim2.new(0.82, 0, 0.36, 0)
-    end
-    -- Reset TP [Left] button
-    if buttons["TP [Left]"] then
-        buttons["TP [Left]"].Position = UDim2.new(0.7, 0, 0.42, 0)
-    end
-    -- Reset TP [Right] button
-    if buttons["TP [Right]"] then
-        buttons["TP [Right]"].Position = UDim2.new(0.82, 0, 0.42, 0)
-    end
-    -- Reset MENU button
-    if tauntButtons["MENU"] then
-        tauntButtons["MENU"].Position = UDim2.new(0.05, 0, 0.3, 0)
-    end
-    -- Reset TAUNT button
-    if tauntButtons["TAUNT"] then
-        tauntButtons["TAUNT"].Position = UDim2.new(0.05, 0, 0.35, 0)
-    end
-    -- Reset Title
-    if Title then
-        Title.Position = UDim2.new(0.5, -80, 0.05, 0)
-    end
-    
-    print("All buttons reset to original positions!")
+    if buttons["float"] then buttons["float"].Position = UDim2.new(0.7, 0, 0.3, 0) end
+    if buttons["Bat Aimbot"] then buttons["Bat Aimbot"].Position = UDim2.new(0.82, 0, 0.3, 0) end
+    if buttons["autoleft"] then buttons["autoleft"].Position = UDim2.new(0.7, 0, 0.36, 0) end
+    if buttons["autoright"] then buttons["autoright"].Position = UDim2.new(0.82, 0, 0.36, 0) end
+    if buttons["TP [Left]"] then buttons["TP [Left]"].Position = UDim2.new(0.7, 0, 0.42, 0) end
+    if buttons["TP [Right]"] then buttons["TP [Right]"].Position = UDim2.new(0.82, 0, 0.42, 0) end
+    if tauntButtons["MENU"] then tauntButtons["MENU"].Position = UDim2.new(0.05, 0, 0.3, 0) end
+    if tauntButtons["TAUNT"] then tauntButtons["TAUNT"].Position = UDim2.new(0.05, 0, 0.35, 0) end
+    if Title then Title.Position = UDim2.new(0.5, -80, 0.05, 0) end
+    print("✅ Positions des boutons réinitialisées")
 end)
 
 -- ========== SIDE MENU BUTTONS ==========
@@ -1249,11 +1239,9 @@ for _, data in pairs(sideItems) do
     tauntButtons[data.name] = s
 end
 
--- MENU Button Functionality - toggles settings panel
+-- MENU Button
 tauntButtons["MENU"].MouseButton1Click:Connect(function()
     SettingsPanel.Visible = not SettingsPanel.Visible
-    
-    -- Visual feedback
     if SettingsPanel.Visible then
         tauntButtons["MENU"].BackgroundColor3 = Color3.fromRGB(130, 80, 255)
         tauntButtons["MENU"].BackgroundTransparency = 0.7
@@ -1263,30 +1251,20 @@ tauntButtons["MENU"].MouseButton1Click:Connect(function()
     end
 end)
 
--- TAUNT Button Functionality
+-- TAUNT Button
 tauntButtons["TAUNT"].MouseButton1Click:Connect(function()
     tauntActive = not tauntActive
-    
     if tauntActive then
-        -- Make button transparent purple when active
         tauntButtons["TAUNT"].BackgroundColor3 = Color3.fromRGB(130, 80, 255)
         tauntButtons["TAUNT"].BackgroundTransparency = 0.7
-        
-        -- Start spamming loop
         tauntLoop = task.spawn(function()
             while tauntActive do
-                -- Try new TextChatService first (newer Roblox chat)
-                local TextChatService = game:GetService("TextChatService")
-                local success = pcall(function()
+                pcall(function()
+                    local TextChatService = game:GetService("TextChatService")
                     local generalChannel = TextChatService.TextChannels:FindFirstChild("RBXGeneral")
                     if generalChannel then
                         generalChannel:SendAsync("/Misthycc s hub")
-                    end
-                end)
-                
-                -- Fallback to legacy chat if new chat fails
-                if not success then
-                    pcall(function()
+                    else
                         local ReplicatedStorage = game:GetService("ReplicatedStorage")
                         local SayMessageRequest = ReplicatedStorage:FindFirstChild("DefaultChatSystemChatEvents")
                         if SayMessageRequest then
@@ -1295,27 +1273,184 @@ tauntButtons["TAUNT"].MouseButton1Click:Connect(function()
                                 SayMessageRequest:FireServer("/Misthycc s hub", "All")
                             end
                         end
-                    end)
-                end
-                
-                task.wait(0.5) -- Spam every 0.5 seconds
+                    end
+                end)
+                task.wait(0.5)
             end
         end)
-        
         print("Taunt spam ENABLED")
     else
-        -- Reset button to original style
         tauntButtons["TAUNT"].BackgroundColor3 = Color3.fromRGB(10, 10, 12)
         tauntButtons["TAUNT"].BackgroundTransparency = 0.15
-        
-        if tauntLoop then
-            task.cancel(tauntLoop)
-            tauntLoop = nil
-        end
-        
+        if tauntLoop then task.cancel(tauntLoop); tauntLoop = nil end
         print("Taunt spam DISABLED")
     end
+    saveConfig()
 end)
+
+-- ========== FONCTIONS DE SAUVEGARDE / CHARGEMENT AUTO ==========
+local configFileName = "Misthycc_Config.json"
+
+local function getCurrentConfig()
+    local config = {
+        floating = floating,
+        batAimbotActive = batAimbotActive,
+        ragdollAutoActive = ragdollAutoActive,
+        spinActive = spinActive,
+        antiRagdollActive = antiRagdollActive,
+        unwalkActive = unwalkActive,
+        stealSpeedActive = stealSpeedActive,
+        stealActive = stealActive,
+        tauntActive = tauntActive,
+        patrolMode = patrolMode,
+        lastTpSide = lastTpSide
+    }
+    return config
+end
+
+local function saveConfig()
+    local config = getCurrentConfig()
+    local json = HttpService:JSONEncode(config)
+    local success, err = pcall(function()
+        writefile(configFileName, json)
+    end)
+    if success then
+        print("✅ Configuration sauvegardée automatiquement")
+    else
+        warn("❌ Sauvegarde auto échouée : " .. tostring(err))
+    end
+end
+
+local function applyConfig(config)
+    if not config then return end
+    
+    floating = config.floating or false
+    batAimbotActive = config.batAimbotActive or false
+    ragdollAutoActive = config.ragdollAutoActive or false
+    spinActive = config.spinActive or false
+    antiRagdollActive = config.antiRagdollActive or false
+    unwalkActive = config.unwalkActive or false
+    stealSpeedActive = config.stealSpeedActive or false
+    stealActive = config.stealActive or false
+    tauntActive = config.tauntActive or false
+    patrolMode = config.patrolMode or "none"
+    lastTpSide = config.lastTpSide or "none"
+    
+    -- Mise à jour UI
+    if floating then
+        updateButtonState(buttons["float"], true, "Float [ON]", "Float")
+    else
+        updateButtonState(buttons["float"], false, "", "Float")
+    end
+    
+    if batAimbotActive then
+        updateButtonState(buttons["Bat Aimbot"], true, "Bat Aimbot [ON]", "Bat Aimbot")
+        startBatAimbot()
+    else
+        updateButtonState(buttons["Bat Aimbot"], false, "", "Bat Aimbot")
+        stopBatAimbot()
+    end
+    
+    if ragdollAutoActive then
+        if lastTpSide == "left" then
+            updateButtonState(buttons["TP [Left]"], true, "TP [Left] [ON]", "TP [Left]")
+            updateButtonState(buttons["TP [Right]"], false, "", "TP [Right]")
+            startRagdollDetector()
+        elseif lastTpSide == "right" then
+            updateButtonState(buttons["TP [Right]"], true, "TP [Right] [ON]", "TP [Right]")
+            updateButtonState(buttons["TP [Left]"], false, "", "TP [Left]")
+            startRagdollDetector()
+        end
+    else
+        updateButtonState(buttons["TP [Left]"], false, "", "TP [Left]")
+        updateButtonState(buttons["TP [Right]"], false, "", "TP [Right]")
+        stopRagdollDetector()
+    end
+    
+    if patrolMode == "left" then
+        startMovement("left", buttons["autoleft"])
+    elseif patrolMode == "right" then
+        startMovement("right", buttons["autoright"])
+    else
+        stopMovement(buttons["autoright"], buttons["autoleft"])
+    end
+    
+    local function setSettingToggle(itemName, isActive)
+        local item = settingsToggles[itemName]
+        if item then
+            local dot = item:FindFirstChild("StatusDot")
+            if isActive then
+                item.BackgroundColor3 = Color3.fromRGB(130, 80, 255)
+                item.BackgroundTransparency = 0.7
+                if dot then dot.BackgroundColor3 = Color3.fromRGB(100, 255, 100) end
+            else
+                item.BackgroundColor3 = Color3.fromRGB(10, 10, 12)
+                item.BackgroundTransparency = 0.15
+                if dot then dot.BackgroundColor3 = Color3.fromRGB(70, 70, 80) end
+            end
+        end
+    end
+    
+    setSettingToggle("Spin Bot", spinActive)
+    if spinActive then startSpinBot() else stopSpinBot() end
+    
+    setSettingToggle("Anti Ragdoll", antiRagdollActive)
+    if antiRagdollActive then startAntiRagdoll() else stopAntiRagdoll() end
+    
+    setSettingToggle("Unwalk", unwalkActive)
+    if unwalkActive then startUnwalk() else stopUnwalk() end
+    
+    setSettingToggle("Steal Speed", stealSpeedActive)
+    if stealSpeedActive then startStealSpeed() else stopStealSpeed() end
+    
+    setSettingToggle("Auto Steal", stealActive)
+    if stealActive then initSteal() else stopStealLoop() end
+    
+    if tauntActive then
+        tauntButtons["TAUNT"].BackgroundColor3 = Color3.fromRGB(130, 80, 255)
+        tauntButtons["TAUNT"].BackgroundTransparency = 0.7
+        if not tauntLoop then
+            tauntLoop = task.spawn(function()
+                while tauntActive do
+                    pcall(function()
+                        local TextChatService = game:GetService("TextChatService")
+                        local generalChannel = TextChatService.TextChannels:FindFirstChild("RBXGeneral")
+                        if generalChannel then
+                            generalChannel:SendAsync("/Misthycc s hub")
+                        else
+                            local ReplicatedStorage = game:GetService("ReplicatedStorage")
+                            local SayMessageRequest = ReplicatedStorage:FindFirstChild("DefaultChatSystemChatEvents")
+                            if SayMessageRequest then
+                                SayMessageRequest = SayMessageRequest:FindFirstChild("SayMessageRequest")
+                                if SayMessageRequest then
+                                    SayMessageRequest:FireServer("/Misthycc s hub", "All")
+                                end
+                            end
+                        end
+                    end)
+                    task.wait(0.5)
+                end
+            end)
+        end
+    else
+        tauntButtons["TAUNT"].BackgroundColor3 = Color3.fromRGB(10, 10, 12)
+        tauntButtons["TAUNT"].BackgroundTransparency = 0.15
+        if tauntLoop then task.cancel(tauntLoop); tauntLoop = nil end
+    end
+end
+
+local function loadConfig()
+    local success, data = pcall(function()
+        return readfile(configFileName)
+    end)
+    if success and data then
+        local decoded = HttpService:JSONDecode(data)
+        applyConfig(decoded)
+        print("✅ Configuration chargée automatiquement")
+    else
+        print("⚠️ Aucune configuration sauvegardée, utilisation des valeurs par défaut.")
+    end
+end
 
 -- ========== START HEARTBEAT ==========
 heartbeatConn = RunService.Heartbeat:Connect(updateWalking)
@@ -1335,14 +1470,11 @@ player.CharacterAdded:Connect(function()
     updateButtonState(buttons["float"], false, "", "Float")
     updateButtonState(buttons["Bat Aimbot"], false, "", "Bat Aimbot")
     
-    -- Stop bat aimbot on respawn
     stopBatAimbot()
-    -- Reset TP state on respawn
     ragdollAutoActive = false
     ragdollWasActive = false
     updateButtonState(buttons["TP [Left]"], false, "", "TP [Left]")
     updateButtonState(buttons["TP [Right]"], false, "", "TP [Right]")
-    -- Restart persistent features if they were active
     if antiRagdollActive then startAntiRagdoll() end
     if unwalkActive then startUnwalk() end
     if stealSpeedActive then startStealSpeed() end
@@ -1404,3 +1536,6 @@ Lib.Destroying:Connect(function()
         heartbeatConn:Disconnect()
     end
 end)
+
+-- Charger automatiquement la config au démarrage
+loadConfig()
